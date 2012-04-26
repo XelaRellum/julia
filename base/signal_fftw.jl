@@ -135,6 +135,33 @@ for (libname, fname_complex, fname_real, T_in, T_out) in
     end
 end
 
+# Guru plans
+
+for (libname, fname_complex, fname_real, T_in, T_out) in
+    ((:_jl_libfftw,"fftw_plan_guru_dft","fftw_plan_guru_dft_r2c",:Float64,:Complex128),
+     (:_jl_libfftwf,"fftwf_plan_guru_dft","fftwf_plan_guru_dft_r2c",:Float32,:Complex64))
+    @eval begin
+        function _jl_fftw_plan_guru_dft(dims::Array{Int32,2}, howmany::Array{Int32,2},
+            X::Array{$T_out}, Y::Array{$T_out}, direction::Int32)
+            ccall(dlsym($libname, $fname_complex),
+                  Ptr{Void},
+                  (Int32, Ptr{Int32}, Int32, Ptr{Int32},
+                   Ptr{$T_out}, Ptr{$T_out}, Int32, Uint32),
+                  size(dims,2), dims, size(howmany,2), howmany,
+                  X, Y, direction, _jl_FFTW_ESTIMATE)
+        end
+        function _jl_fftw_plan_guru_dft(dims::Array{Int32,2}, howmany::Array{Int32,2},
+            X::Array{$T_in}, Y::Array{$T_out}, direction::Int32)
+            ccall(dlsym($libname, $fname_complex),
+                  Ptr{Void},
+                  (Int32, Ptr{Int32}, Int32, Ptr{Int32},
+                   Ptr{$T_in}, Ptr{$T_out}, Int32, Uint32),
+                  size(dims,2), dims, size(howmany,2), howmany,
+                  X, Y, direction, _jl_FFTW_ESTIMATE)
+        end
+    end
+end
+
 # Complex inputs
 
 function fftn{T<:Union(Complex128,Complex64)}(X::Array{T})
@@ -171,6 +198,21 @@ function fftn{T<:Union(Float64,Float32)}(X::Vector{T})
         Y[i] = conj(Y[n-i+2])
     end
 
+    return Y
+end
+
+# fft along single dimension (fftd(x,d) == fft(x,[],d))
+function fftd{T<:Union(Complex128,Complex64)}(X::Array{T}, dim::Int)
+    s = int32([size(X)...])
+    strides = [ prod(s[1:i-1])::Int32 | i=1:length(s) ]
+    dims = [s[dim],strides[dim],strides[dim]]''
+    del(s, dim)
+    del(strides, dim)
+    howmany = [s strides strides]'
+    Y = similar(X, T)
+    plan = _jl_fftw_plan_guru_dft(dims, howmany, X, Y, _jl_FFTW_FORWARD)
+    _jl_fftw_execute(T, plan)
+    _jl_fftw_destroy_plan(T, plan)
     return Y
 end
 
