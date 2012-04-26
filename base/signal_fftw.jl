@@ -201,36 +201,6 @@ function fftn{T<:Union(Float64,Float32)}(X::Vector{T})
     return Y
 end
 
-# fft along single dimension (fftd(x,d) == fft(x,[],d))
-function fftd{T<:Union(Complex128,Complex64)}(X::Array{T}, dim::Int)
-    s = [size(X)...]
-    strides = [ prod(s[1:i-1]) | i=1:length(s) ]
-    dims = [s[dim],strides[dim],strides[dim]]''
-    del(s, dim)
-    del(strides, dim)
-    howmany = [s strides strides]'
-    Y = similar(X, T)
-    plan = _jl_fftw_plan_guru_dft(dims, howmany, X, Y, _jl_FFTW_FORWARD)
-    _jl_fftw_execute(T, plan)
-    _jl_fftw_destroy_plan(T, plan)
-    return Y
-end
-
-function fftd{T<:Union(Float64,Float32)}(X::Array{T}, dim::Int)
-    s = [size(X)...]
-    strides = [ prod(s[1:i-1]) | i=1:length(s) ]
-    n = s[dim]
-    dims = [n,strides[dim],strides[dim]]''
-    del(s, dim)
-    del(strides, dim)
-    howmany = [s strides strides]'
-    Y = complex(X) # in-place transform
-    plan = _jl_fftw_plan_guru_dft(dims, howmany, Y, Y, _jl_FFTW_FORWARD)
-    _jl_fftw_execute(T, plan)
-    _jl_fftw_destroy_plan(T, plan)
-    return Y
-end
-
 # TODO: Can be computed efficiently without converting to complex
 # if the conjugate pairs are checked for.
 ifftn{T<:Union(Float64,Float32)}(X::Array{T}) = ifftn(complex(X))
@@ -248,31 +218,37 @@ ifft3{T<:Union(Float64,Float32,Complex128,Complex64)}(X::Array{T})  = ifftn(X)
 
 # Compute fft and ifft of slices of arrays
 
-fft(X) = fft(X, (), 1)
-ifft(X) = ifft(X, (), 1)
+fft(X) = fft(X, 1)
+ifft(X) = ifft(X, 1)
 
-# TODO: This is inefficient. Advanced interfaces of _jl_FFTW should be used
-for (fname, fname_compute) in ((:fft,:fftn), (:ifft,:ifftn))
+for (fname,direction) in ((:fft,:_jl_FFTW_FORWARD),(:ifft,:_jl_FFTW_BACKWARD))
     @eval begin
-        function ($fname){T<:Union(Float64,Float32,Complex128,Complex64),n}(
-            X::Array{T,n}, npoints, dim::Integer
-        )
-            if npoints != (); error("the npoints option is not yet supported"); end
-            if dim > 2; error("only 2d arrays are supported for now"); end
+        function ($fname){T<:Union(Complex128,Complex64)}(X::Array{T}, dim::Int)
+            s = [size(X)...]
+            strides = [ prod(s[1:i-1]) | i=1:length(s) ]
+            dims = [s[dim],strides[dim],strides[dim]]''
+            del(s, dim)
+            del(strides, dim)
+            howmany = [s strides strides]'
+            Y = similar(X, T)
+            plan = _jl_fftw_plan_guru_dft(dims, howmany, X, Y, $direction)
+            _jl_fftw_execute(T, plan)
+            _jl_fftw_destroy_plan(T, plan)
+            return Y
+        end
 
-            if n == 1; return fftn(X); end
-
-            Y = similar(X, (is(T,Float32)||is(T,Complex64)) ? Complex64 : Complex128)
-
-            if dim == 2; X = X.'; Y = reshape(Y, size(X)); end
-
-            for i=1:size(X,1):numel(X)
-                R = i:(i+size(X,1)-1)
-                Y[R] = ($fname_compute)(X[R])
-            end
-
-            if dim == 2; Y = Y.'; end
-
+        function ($fname){T<:Union(Float64,Float32)}(X::Array{T}, dim::Int)
+            s = [size(X)...]
+            strides = [ prod(s[1:i-1]) | i=1:length(s) ]
+            n = s[dim]
+            dims = [n,strides[dim],strides[dim]]''
+            del(s, dim)
+            del(strides, dim)
+            howmany = [s strides strides]'
+            Y = complex(X) # in-place transform
+            plan = _jl_fftw_plan_guru_dft(dims, howmany, Y, Y, $direction)
+            _jl_fftw_execute(T, plan)
+            _jl_fftw_destroy_plan(T, plan)
             return Y
         end
     end
