@@ -11,7 +11,8 @@ fft_m4 = fft(m4)
 fft2_m4 = fft2(m4)
 fftd2_m4 = fft(m4,2)
 ifft_fft_m4 = ifft(fft(m4))
-#fftn_m4 = fftn(m4)
+fftn_m4 = fftn(m4)
+ifftn_fftn_m4 = ifftn(fftn(m4))
 
 true_fft_m4 = [
     34.            34.            34.            34.;
@@ -36,5 +37,6 @@ for i = 1:length(m4)
     @assert_approx_eq fft2_m4[i] true_fftn_m4[i]
     @assert_approx_eq fftd2_m4[i] true_fftd2_m4[i]
     @assert_approx_eq ifft_fft_m4[i] m4[i]*4
-    #@assert_approx_eq fftn_m4[i] true_fftn_m4[i]
+    @assert_approx_eq fftn_m4[i] true_fftn_m4[i]
+    @assert_approx_eq ifftn_fftn_m4[i] m4[i]*16
 end

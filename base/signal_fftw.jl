@@ -162,59 +162,34 @@ for (libname, fname_complex, fname_real, T_in, T_out) in
     end
 end
 
-# Complex inputs
+# fftn/ifftn
 
-function fftn{T<:Union(Complex128,Complex64)}(X::Array{T})
-    Y = similar(X, T)
-    plan = _jl_fftw_plan_dft(X, Y, _jl_FFTW_FORWARD)
-    _jl_fftw_execute(T, plan)
-    _jl_fftw_destroy_plan(T, plan)
-    return Y
-end
+for (fname,direction) in ((:fftn,:_jl_FFTW_FORWARD),(:ifftn,:_jl_FFTW_BACKWARD))
+    @eval begin
+        function ($fname){T<:Union(Complex128,Complex64)}(X::Array{T})
+            Y = similar(X, T)
+            plan = _jl_fftw_plan_dft(X, Y, $direction)
+            _jl_fftw_execute(T, plan)
+            _jl_fftw_destroy_plan(T, plan)
+            return Y
+        end
 
-function ifftn{T<:Union(Complex128,Complex64)}(X::Array{T})
-    Y = similar(X, T)
-    plan = _jl_fftw_plan_dft(X, Y, _jl_FFTW_BACKWARD)
-    _jl_fftw_execute(T, plan)
-    _jl_fftw_destroy_plan(T, plan)
-    return Y
-end
-
-# Real inputs
-
-# This definition can be generalized to fftn, once the code to 
-# compute the conjugate parts for the nd case is implemented.
-function fftn{T<:Union(Float64,Float32)}(X::Vector{T})
-    T_out = is(T, Float32) ? Complex64 : Complex128
-
-    Y = similar(X, T_out)
-    plan = _jl_fftw_plan_dft(X, Y)
-    _jl_fftw_execute(T, plan)
-    _jl_fftw_destroy_plan(T, plan)
-
-    n = length(Y)
-    nconj = int(length(X)/2 - 1)
-    for i=n:-1:(n-nconj)
-        Y[i] = conj(Y[n-i+2])
+        function ($fname){T<:Union(Float64,Float32)}(X::Array{T})
+            Y = complex(X) # in-place transform
+            plan = _jl_fftw_plan_dft(Y, Y, $direction)
+            _jl_fftw_execute(T, plan)
+            _jl_fftw_destroy_plan(T, plan)
+            return Y
+        end
     end
-
-    return Y
 end
-
-# TODO: Can be computed efficiently without converting to complex
-# if the conjugate pairs are checked for.
-ifftn{T<:Union(Float64,Float32)}(X::Array{T}) = ifftn(complex(X))
 
 # Convenience functions
-fft2{T<:Union(Float64,Float32)}(X::Matrix{T}) = fftn(complex(X))
-fft3{T<:Union(Float64,Float32)}(X::Array{T})  = fftn(complex(X))
 
-fft2{T<:Union(Complex128,Complex64)}(X::Matrix{T}) = fftn(X)
-fft3{T<:Union(Complex128,Complex64)}(X::Array{T})  = fftn(X)
-
-ifft{T<:Union(Float64,Float32,Complex128,Complex64)}(X::Vector{T})  = ifftn(X)
-ifft2{T<:Union(Float64,Float32,Complex128,Complex64)}(X::Matrix{T}) = ifftn(X)
-ifft3{T<:Union(Float64,Float32,Complex128,Complex64)}(X::Array{T})  = ifftn(X)
+fft2{T}(X::Matrix{T}) = fftn(X)
+fft3{T}(X::Array{T,3}) = fftn(X)
+ifft2{T}(X::Matrix{T}) = ifftn(X)
+ifft3{T}(X::Array{T,3}) = ifftn(X)
 
 # Compute fft and ifft of slices of arrays
 
